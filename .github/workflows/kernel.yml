@@ -1,0 +1,94 @@
+name: fajita-kernel
+
+# Builds the patched XNU for the OnePlus 6T (fajita) on a macOS runner and
+# uploads kernel.macho + the ADT sidecar. The Linux host then builds payload.img
+# and flashes it to system_a.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kernel.yml'
+      - 'configs/**'
+      - 'dts/**'
+      - 'patches/**'
+      - 'board.toml'
+      - 'feeds.toml'
+
+jobs:
+  kernel:
+    runs-on: macos-15
+    timeout-minutes: 300
+    env:
+      UNIXNU_IPSW: https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw
+      XNU_OWNER_ROOT_VOLUME_UUID: 04769D26-2CA0-4825-B443-E2E5F88300F2
+      UNIXNU_UNIQUE_CHIP_ID: "0badc0de"
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+
+    steps:
+      - name: Checkout device repository
+        uses: actions/checkout@v4
+        with:
+          path: device
+
+      - name: Install host tools
+        run: |
+          brew install cmake ninja llvm lld mtools dtc unifdef jq python@3.12
+          brew install blacktop/tap/ipsw || true
+          echo "/opt/homebrew/opt/llvm/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix python@3.12)/bin" >> "$GITHUB_PATH"
+          python3 --version
+          python3 -m pip install --break-system-packages -q pyyaml tomli || true
+          xcodebuild -version
+
+      - name: Clone UniXNU
+        run: |
+          git clone --recurse-submodules --depth 1 https://github.com/UniXNU/UniXNU.git unixnu
+          cd unixnu && git submodule update --init --recursive
+
+      - name: Select configuration
+        run: |
+          cd unixnu
+          ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device"
+          ./unixnu status --json > "$GITHUB_WORKSPACE/status.json" || true
+
+      - name: Fetch sources and IPSW
+        run: |
+          cd unixnu
+          ./unixnu fetch
+
+      - name: Build XNU
+        run: |
+          cd unixnu
+          ./unixnu build kernel
+          echo "=== outputs ==="
+          find out -name 'kernel.macho*' -printf '%12s  %p\n' || true
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          find unixnu/out -name 'kernel.macho*' -exec cp -v {} "$GITHUB_WORKSPACE/artifacts/" \; || true
+          find unixnu/out -path '*logs*' -name '*.log' -exec cp -v {} "$GITHUB_WORKSPACE/artifacts/" \; || true
+          ls -l "$GITHUB_WORKSPACE/artifacts" || true
+
+      - name: Upload kernel
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fajita-kernel
+          path: artifacts/**
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload status and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fajita-logs
+          path: |
+            status.json
+            unixnu/out/fajita/logs/**
+          if-no-files-found: ignore
+          retention-days: 7
