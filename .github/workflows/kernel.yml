@@ -45,8 +45,14 @@ jobs:
 
       - name: Clone UniXNU
         run: |
-          git clone --recurse-submodules --depth 1 https://github.com/UniXNU/UniXNU.git unixnu
-          cd unixnu && git submodule update --init --recursive
+          git clone --depth 1 https://github.com/UniXNU/UniXNU.git unixnu
+          cd unixnu
+          # drivers/AppleKeyStoreState pins a commit the upstream repository no longer serves
+          git config -f .gitmodules --remove-section submodule.drivers/AppleKeyStoreState || true
+          git submodule update --init --depth 1 --recursive || true
+          for m in kits/XnuPrelink drivers/ArmCpu drivers/ArmDTPlatform drivers/DarwinBoot kits/VerifiedRoot; do
+            test -e "$m/." || { echo "missing submodule $m"; exit 1; }
+          done
 
       - name: Merge generic XNU patch series
         run: |
