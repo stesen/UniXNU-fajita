@@ -23,5 +23,7 @@ text = PATH.read_text()
 pattern = re.compile(r"kernel_args = \[.*?\n\]", re.S)
 if not pattern.search(text):
     raise SystemExit("kernel_args block not found")
-PATH.write_text(pattern.sub(MINIMAL, text, count=1))
+text = pattern.sub(MINIMAL, text, count=1)
+text = text.replace("panic_screen = true", "panic_screen = false")
+PATH.write_text(text)
 print(f"trimmed kernel_args in {PATH}")
