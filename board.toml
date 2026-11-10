@@ -46,7 +46,8 @@ archives = [
   "build-corecrypto-14.py --namespace",
   "build-arm-driver.py ArmDTPlatform",
   "build-arm-driver.py ArmCpu",
-  "build-fajita-dwc3.py",             # NativeDwc3 probe (default-off), the only extra archive linked by the console profile
+  "build-libpthread-kernel.py",
+  "build-fajita-dwc3.py",
 ]
 
 # The pin and early initializer are the sheng values: the same 21H461 kernelcache. The roots are the sheng list,
