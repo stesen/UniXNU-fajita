@@ -102,6 +102,21 @@ jobs:
           print("prepare-xnu-source.py hardened")
           PY
 
+      - name: Relax unknown-warning flags
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("unixnu/scripts/audit-storage-interface.py")
+          s = p.read_text()
+          if "-Wno-unknown-warning-option" not in s:
+              s = s.replace("'-Wno-unnecessary-virtual-specifier'",
+                            "'-Wno-unknown-warning-option', '-Wno-unnecessary-virtual-specifier'")
+              p.write_text(s)
+              print("audit flags relaxed")
+          else:
+              print("already relaxed")
+          PY
+
       - name: Clone Mu-Silicium
         run: |
           git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/Project-Silicium/Mu-Silicium.git uefi
