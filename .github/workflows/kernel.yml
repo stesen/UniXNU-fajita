@@ -65,6 +65,35 @@ jobs:
           cd unixnu
           ./unixnu fetch
 
+      - name: Harden header fetch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("unixnu/scripts/prepare-xnu-source.py")
+          src = p.read_text()
+          start = src.index("def fetch(url):")
+          end = src.index("def restore(")
+          new = """def fetch(url):
+              import time
+              last = None
+              for attempt in range(5):
+                  request = urllib.request.Request(url, headers={'User-Agent': 'unixnu-prepare-xnu-source'})
+                  if TOKEN and urllib.parse.urlsplit(url).hostname in ('api.github.com', 'raw.githubusercontent.com'):
+                      request.add_header('Authorization', f'Bearer {TOKEN}')
+                  try:
+                      with urllib.request.urlopen(request, timeout=90) as response:
+                          return response.read()
+                  except Exception as exc:
+                      last = exc
+                      time.sleep(5 * (attempt + 1))
+              raise last
+
+
+          """
+          p.write_text(src[:start] + new + src[end:])
+          print("prepare-xnu-source.py hardened")
+          PY
+
       - name: Build XNU
         run: |
           cd unixnu
