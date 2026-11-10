@@ -48,6 +48,7 @@ archives = [
   "build-arm-driver.py ArmCpu",
   "build-libpthread-kernel.py",
   "build-fajita-dwc3.py",
+  "build-boot-progress.py",
 ]
 
 # The pin and early initializer are the sheng values: the same 21H461 kernelcache. The roots are the sheng list,
