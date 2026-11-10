@@ -100,18 +100,24 @@ jobs:
           echo "UNIXNU_UEFI=$GITHUB_WORKSPACE/uefi" >> "$GITHUB_ENV"
           find uefi -name 'Font.h' | head -3
 
-      - name: Build XNU pass 1 - compile records and kit archives
-        continue-on-error: true
+      - name: Build XNU pipeline
         run: |
+          set -x
           cd unixnu
+          ./unixnu ipsw fetch KernelCache || true
+          # pass 1: compile records, kit archives 01-07, and the unstripped mach
           ./unixnu build kernel || true
-
-      - name: Build XNU pass 2 - link with the archives
-        run: |
-          cd unixnu
+          MACH=$(find out -name 'mach.development*.noctf' | head -1)
+          echo "mach=$MACH"
+          if [ -n "$MACH" ]; then ./unixnu prelink --kernel "$MACH" || true; fi
+          KM=$(find out -name 'kernel.macho' | head -1)
+          echo "kernel.macho=$KM"
+          if [ -z "$KM" ]; then echo "no prelinked kernel.macho"; exit 1; fi
+          export FAJITA_STORAGE_CANDIDATE="$KM"
+          # pass 2: archives 08+ now have their candidate; kernel links and prelinks
           ./unixnu build kernel
           echo "=== outputs ==="
-          find out -name 'kernel.macho*' -printf '%12s  %p\n' || true
+          find out -name 'kernel.macho*' -printf '%12s  %p\n'
 
       - name: Collect artifacts
         if: always()
