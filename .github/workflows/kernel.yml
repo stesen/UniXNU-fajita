@@ -121,32 +121,42 @@ jobs:
           xcrun ar rcs out/fajita/tree/build/boot-progress-stub/libBootProgressStub.a             out/fajita/tree/build/boot-progress-stub/stub.o
           ls -l out/fajita/tree/build/boot-progress-stub
 
-      - name: Build kernel and ADT
+      - name: Build console kernel (candidate for the storage audit)
         run: |
           set -x
           cd unixnu
           ./unixnu build kernel || true
-          python3 "$GITHUB_WORKSPACE/device/scripts/make-fajita-adt.py" \
-            --dram-size 0x200000000 --chip-id 0x8011 --unique-chip-id 0badc0de \
-            --root-match-volume-uuid 04769D26-2CA0-4825-B443-E2E5F88300F2 \
-            --output out/fajita/kernel/kernel.macho.adt
+          mkdir -p /tmp/cand
+          cp out/fajita/kernel/kernel.macho /tmp/cand/kernel.macho
+          cp out/fajita/kernel/kernel.json /tmp/cand/kernel.json 2>/dev/null || true
+          ls -l /tmp/cand
+
+      - name: Build full kernel with the candidate
+        run: |
+          set -e
+          set -x
+          cd "$GITHUB_WORKSPACE/device"
+          cp board-full.toml board.toml
+          cp configs/fajita_full_defconfig configs/fajita_defconfig
+          cd "$GITHUB_WORKSPACE/unixnu"
+          ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device"
+          ls -l /tmp/cand
+          FAJITA_STORAGE_CANDIDATE=/tmp/cand/kernel.macho ./unixnu build kernel
           ls -l out/fajita/kernel/
 
-      - name: Build console payload
+      - name: Build payload (full argument set)
         run: |
           set -x
-          cp -r device device-console
-          python3 device-console/scripts/trim-payload-args.py device-console/board.toml
           cd unixnu
-          ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device-console"
-          ./unixnu build payload -D "$GITHUB_WORKSPACE/device-console" --unique-chip-id 0badc0de
-          ls -l out/fajita/payload/ || true
+          ./unixnu build payload -D "$GITHUB_WORKSPACE/device" --unique-chip-id 0badc0de
+          ls -l out/fajita/payload/
 
       - name: Collect artifacts
         if: always()
         run: |
           mkdir -p "$GITHUB_WORKSPACE/artifacts"
           find unixnu/out -name 'kernel.macho*' -exec cp -v {} "$GITHUB_WORKSPACE/artifacts/" \; || true
+          find unixnu/out -name 'payload*.img' -exec cp -v {} "$GITHUB_WORKSPACE/artifacts/" \; || true
           find unixnu/out -path '*logs*' -name '*.log' -exec cp -v {} "$GITHUB_WORKSPACE/artifacts/" \; || true
           ls -l "$GITHUB_WORKSPACE/artifacts" || true
 
