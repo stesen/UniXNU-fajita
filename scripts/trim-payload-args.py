@@ -17,6 +17,20 @@ MINIMAL = '''kernel_args = [
   "armcpu-timer-intid=19",
   "pcpu=0xf0",
   "fajita-wdog=3",
+  "offline-legacy-register=1",
+  "offline-legacy-phase=4",
+  "offline-legacy-gop=1",
+  "offline-legacy-pm=1",
+  "offline-legacy-validate=1",
+  "offline-legacy-transfer=1",
+  "offline-legacy-cpu-present=1",
+  "offline-legacy-unit-scale=2",
+  "fajita-display-logical=2048x2732",
+  "fajita-fb-wc=1",
+  "fajita-fb-src-cached=1",
+  "sheng-fb-diff=1",
+  "sheng-vsync=60",
+  "sheng-banner=0",
 ]'''
 
 text = PATH.read_text()
