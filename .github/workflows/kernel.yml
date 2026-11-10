@@ -94,6 +94,12 @@ jobs:
           print("prepare-xnu-source.py hardened")
           PY
 
+      - name: Clone Mu-Silicium
+        run: |
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/Project-Silicium/Mu-Silicium.git uefi
+          echo "UNIXNU_UEFI=$GITHUB_WORKSPACE/uefi" >> "$GITHUB_ENV"
+          find uefi -name 'Font.h' | head -3
+
       - name: Build XNU
         run: |
           cd unixnu
