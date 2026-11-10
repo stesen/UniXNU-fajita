@@ -25,6 +25,7 @@ jobs:
       XNU_OWNER_ROOT_VOLUME_UUID: 04769D26-2CA0-4825-B443-E2E5F88300F2
       UNIXNU_UNIQUE_CHIP_ID: "0badc0de"
       HOMEBREW_NO_AUTO_UPDATE: "1"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout device repository
