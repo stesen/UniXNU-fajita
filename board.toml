@@ -47,7 +47,6 @@ archives = [
   "build-arm-driver.py ArmDTPlatform",
   "build-arm-driver.py ArmCpu",
   "build-arm-driver.py NativeAES",
-  "build-native-aes-bindings.py",
   "build-mockfs-fixture.py",
   "build-libpthread-kernel.py",
   "build-fajita-storage.py",          # storage ABI audit and NativeVirtioBlock bindings (needs FAJITA_STORAGE_CANDIDATE)
