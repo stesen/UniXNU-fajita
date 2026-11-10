@@ -113,24 +113,26 @@ jobs:
           xcrun ar rcs out/fajita/tree/build/boot-progress-stub/libBootProgressStub.a             out/fajita/tree/build/boot-progress-stub/stub.o
           ls -l out/fajita/tree/build/boot-progress-stub
 
-      - name: Build XNU pipeline
+      - name: Build kernel and ADT
         run: |
           set -x
           cd unixnu
-          ./unixnu ipsw fetch KernelCache || true
-          # pass 1: compile records, kit archives 01-07, and the unstripped mach
           ./unixnu build kernel || true
-          MACH=$(find out -name 'mach.development*.noctf' | head -1)
-          echo "mach=$MACH"
-          if [ -n "$MACH" ]; then ./unixnu prelink --kernel "$MACH" || true; fi
-          KM=$(find out -name 'kernel.macho' | head -1)
-          echo "kernel.macho=$KM"
-          if [ -z "$KM" ]; then echo "no prelinked kernel.macho"; exit 1; fi
-          export FAJITA_STORAGE_CANDIDATE="$KM"
-          # pass 2: archives 08+ now have their candidate; kernel links and prelinks
-          ./unixnu build kernel
-          echo "=== outputs ==="
-          find out -name 'kernel.macho*' -printf '%12s  %p\n'
+          python3 "$GITHUB_WORKSPACE/device/scripts/make-fajita-adt.py" \
+            --dram-size 0x200000000 --chip-id 0x8011 --unique-chip-id 0badc0de \
+            --root-match-volume-uuid 04769D26-2CA0-4825-B443-E2E5F88300F2 \
+            --output out/fajita/kernel/kernel.macho.adt
+          ls -l out/fajita/kernel/
+
+      - name: Build console payload
+        run: |
+          set -x
+          cp -r device device-console
+          python3 device-console/scripts/trim-payload-args.py device-console/board.toml
+          cd unixnu
+          ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device-console"
+          ./unixnu build payload -D "$GITHUB_WORKSPACE/device-console" --unique-chip-id 0badc0de
+          ls -l out/fajita/payload/ || true
 
       - name: Collect artifacts
         if: always()
