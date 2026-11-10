@@ -47,6 +47,12 @@ jobs:
           git clone --recurse-submodules --depth 1 https://github.com/UniXNU/UniXNU.git unixnu
           cd unixnu && git submodule update --init --recursive
 
+      - name: Merge generic XNU patch series
+        run: |
+          cp -n unixnu/patches/xnu/*.patch device/patches/xnu/ || true
+          rm -f device/patches/xnu/zzz-pmap-reserved10.patch
+          echo "patch count: $(ls device/patches/xnu | wc -l)"
+
       - name: Select configuration
         run: |
           cd unixnu
