@@ -1,0 +1,240 @@
+# Board description of the OnePlus 6T (fajita, SDM845), read by the unixnu build driver.
+#
+# Bring-up stage 1 works (firmware and UniXNU menu) and the userdata image is flashed. The kernel, prelink and payload
+# sections target the first kernel boot: XNU to the video console, no storage yet.
+
+[board]
+name = "fajita"
+soc = "SDM845"
+description = "OnePlus 6T"
+kit = "fajita"                     # the package/ of this repository appears as kits/fajita in the build tree
+
+# The target OS image: the unchanged iPad7,1 iPadOS 17.7.11 restore image, the sheng target. SDM845 is ARMv8.2 without
+# pointer authentication, so it runs arm64 userlands only; iPadOS 17 on A10X is the newest one the XNU source matches.
+# iOS 16.7.16 for the iPhone X is the planned phone userland; see NOTES-ios16.md. Give --ipsw PATH to use a local file;
+# without it the remote url is read with range requests, only the members that are needed.
+[ipsw]
+url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
+product = "iPad7,1"
+version = "17.7.11"
+build = "21H461"
+device_class = "j120ap"
+chip_id = 0x8011
+board_id = 12
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]   # the small components
+
+[ipsw.sha256]
+"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
+"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
+
+# The raw image for the userdata partition: the OS and SystemOS disk images of the IPSW behind a manifest.
+# first_lba and last_lba are the GPT entry "userdata" (sda17) of LUN 0, read from the phone (256 GB model).
+[userdata]
+first_lba = 0x186f40
+last_lba = 0x3ad1ffa
+lba_bytes = 4096
+windows = [
+  { name = "OS", component = "OS" },
+  { name = "SystemOS", component = "Cryptex1,SystemOS" },
+]
+
+[kernel]
+defconfig = "fajita_defconfig"
+# Archive builders of the kernel step, in order: the generic part of the sheng list.
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "build-arm-driver.py ArmDTPlatform",
+  "build-arm-driver.py ArmCpu",
+  "build-arm-driver.py NativeAES",
+  "build-native-aes-bindings.py",
+  "build-mockfs-fixture.py",
+  "build-libpthread-kernel.py",
+  "build-fajita-storage.py",          # storage ABI audit and NativeVirtioBlock bindings (needs FAJITA_STORAGE_CANDIDATE)
+  "build-arm-driver.py NativeRamBlock",   # the RAM-backed Data volume (/private/var) from the Data seed
+  "build-native-virtio-bindings.py --component NativeRamBlock --directory build/native-ram-block",
+  "build-fajita-verified-root.py",    # owner keys, OS and SystemOS policies, libVerifiedRootProbe.a (needs the OS images)
+  "build-arm-driver.py NativeUfs",
+  "build-fajita-dwc3.py",             # NativeDwc3: SDM845 DWC3 USB device-mode probe (default-off; native-dwc3-probe=1), for the SSH-over-USB channel
+  "build-sheng-platform-power.py",
+  "build-boot-progress.py",          # kits/fajita (from UniXNU-sheng d92e799): boot progress, fault probe, watchdog/lite job policy, diag export    # the PMGR the original AMFI needs, from UniXNU-sheng
+  "build-native-legacy-display.py",  # CPU-rendered display (NativeLegacyDisplay over the UEFI framebuffer), HID input, keystore stub
+  "build-fajita-touch.py",           # libFajitaTouch.a: S3706B touch over GENI I2C (fajita-touch=<stage>, default off), see NOTES-touch.md
+  "build-fajita-cpufreq.py",         # libFajitaCpuFreq.a: OSM CPU clocks and per-core MHz (fajita-cpufreq=<n>, default off)
+]
+
+# The pin and early initializer are the sheng values: the same 21H461 kernelcache. The roots are the sheng list,
+# known to prelink with it; trim them during bring-up.
+[kernel.prelink]
+tool = "kits/NativePrelink/emit_prelink.py"
+kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
+slide = "-0x1000000"
+early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
+roots = [
+  "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
+  "com.apple.driver.AppleARMPlatform",
+  "com.apple.driver.AppleARMWatchdogTimer",
+  "com.apple.driver.AppleAudioClockLibs",
+  "com.apple.driver.AppleEffaceableStorage",
+  "com.apple.driver.AppleIISController",
+  "com.apple.driver.AppleM2ScalerCSCDriver",
+  "com.apple.driver.AppleMobileFileIntegrity",
+  "com.apple.driver.ApplePMGR",
+  "com.apple.driver.IODARTFamily",
+  "com.apple.filesystems.apfs",
+  "com.apple.iokit.CoreAnalyticsFamily",
+  "com.apple.iokit.IOAVFamily",
+  "com.apple.iokit.IOAudio2Family",
+  "com.apple.iokit.IOCECFamily",
+  "com.apple.iokit.IOCryptoAcceleratorFamily",
+  "com.apple.iokit.IOGPUFamily",
+  "com.apple.iokit.IOHDCPFamily",
+  "com.apple.iokit.IOMobileGraphicsFamily",
+  "com.apple.iokit.IOReportFamily",
+  "com.apple.iokit.IOSlowAdaptiveClockingFamily",
+  "com.apple.iokit.IOStorageFamily",
+  "com.apple.iokit.IOSurface",
+  "com.apple.kec.Libm",
+  "com.apple.kec.corecrypto",
+  "com.apple.kext.AppleMatch",
+  "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4",
+  "com.apple.security.sandbox",
+  "com.apple.iokit.IOHIDFamily",
+  "com.apple.iokit.IOHIDEventDriver",
+]
+
+# The Mu-Silicium checkout (--uefi) gets Platforms/OnePlus/fajitaPkg from scripts/make-fajita-uefi.py, which
+# derives it from enchiladaPkg (OnePlus 6, same SoC and memory map).
+[firmware]
+config = "fajita"                  # Resources/Configs/fajita.toml in the Mu-Silicium checkout (--uefi)
+dsc = "Platforms/OnePlus/fajitaPkg/fajita.dsc"
+fd = "Build/fajitaPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+submodules = ["Binaries", "Common/Mu", "Common/Mu_OEM_Sample", "Silicium-ACPI", "Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl"]
+packages = [
+  "{uefi}",
+  "{uefi}/Platforms/OnePlus",
+  "{tree}/package",
+  "{tree}/drivers/DarwinBoot",
+  "{edk2}",
+  "{uefi}/Common/Mu",
+  "{uefi}/Common/Mu_OEM_Sample",
+  "{uefi}/Silicon/Qualcomm",
+  "{uefi}/Silicon/Silicium",
+  "{uefi}/Silicium-ACPI",
+  "{uefi}/Silicium-ACPI/Platforms/OnePlus",
+  "{uefi}/Silicium-ACPI/Silicon/Qualcomm",
+]
+
+[firmware.defines]
+DEVICE_MODEL = "fajita"
+BUILDID_STRING = "fajita-bringup"
+# Defaults of Mu-Silicium build_uefi.py and DeviceBuild.py, which unixnu does not run.
+ENABLE_SECUREBOOT = 0
+MEMORY_PROTECTION = "TRUE"
+SHIP_MODE = "FALSE"
+
+# The ramdisk of the boot image: a FAT volume with the UniXNU config, the kernel and its device tree. The loader
+# (DarwinBoot) is part of the firmware volume. First kernel boot: no storage driver, so XNU is expected to reach the
+# video console and stop at the root device. dram_size is the 8 GiB of the 256 GB model.
+[payload]
+volume = "FAJITAESP"
+# The payload is flashed to a partition, not carried in the boot image (the ABL refuses large ramdisks): system_a
+# (2.86 GiB, unused with slot b active), where UFSDxe, PartitionDxe and Fat expose it to UniXNU. The kernel with the
+# verified root policies is some 124 MiB.
+size_mib = 192
+loader = "firmware"
+title = "fajita first boot: XNU to console"
+dram_size = "0x200000000"
+# Patch a copy of the kernel with the sheng boot probes (scripts/patch-xnu-entry-probe.py --panic-screen --no-reset):
+# a blue band at kernel entry, a magenta band before the MMU is enabled, and panic() drawn on the screen.
+panic_screen = true
+# The static and System trust caches of 21H461, for the userland stages.
+trust_cache_sha256 = [
+  "7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7",
+  "8900d6a93d7a59ce1a872a5c081e559f4240a218f97e12d44d22dda46644d68f",
+]
+# No "-v": DarwinBoot then hands XNU v_display 1 (BootVideo.h), the console is in graphics mode, and NativeLegacyDisplay takes the
+# firmware framebuffer as the main display (startHardware: primary = v_display == 1). With "-v" the local DarwinBoot change clears
+# v_display, so the display never accepts a swap. boot-progress (below) shows the kernel console lines instead, until the display
+# takes the screen at its first presented frame (boot_progress_prepare_scanout).
+kernel_args = [
+  "debug=0x14e",
+  "kt_fixed_zones=120",
+  "armcpu-timer-intid=19","-apfs_shared_datavolume","ml-timeout-lock-panic-scale=40","sheng-staged-apps=1","sheng-disable-watchdogd=1","sheng-lite=1","sheng-data-persist=2","boot-progress=2","sheng-log=1","sheng-autoreset=2400","pcpu=0xf0","fajita-wdog=3","sheng-smp=1","cpus=8","armcpu-self-ipi=1","fajita-cpufreq=2","native-data-writeback=1",
+  "-no_slto_panic",
+  "native-ufs-root=1",
+  
+  "native-ufs-smmu-stream=0x100",     # SDM845: iommus = <&apps_smmu 0x100 0xf>
+  "native-ufs-smmu-mask=0xf",
+  "native-ufs-smmu-size=0x80000",     # apps_smmu reg size
+  "native-ufs-smmu-adopt=1",          # the firmware leaves 0x800f0100 on its own bank 2 with translation off; keep it
+  "sheng-pmgr=2",
+  # CPU-rendered UI, the sheng set (UniXNU-sheng board.toml kernel_args) without its GPU, touch, cpufreq and SMP arguments.
+  "offline-mobile-graphics-load=1",   # load IOMobileGraphicsFamily, register NativeLegacyDisplay (offline-component-load-probes.patch)
+  "offline-mobile-graphics-client=1",
+  "offline-legacy-register=1",
+  "offline-legacy-phase=4",           # attach the GOP nub as /arm-io/gop-display (display-subsystem) and start the display there
+  "offline-legacy-gop=1",             # map the UEFI framebuffer (1080x2340, 32 bpp, stride 4320)
+  "offline-legacy-pm=1",
+  "offline-legacy-validate=1",        # accept one full-screen BGRA IOSurface (or a blank frame) per swap
+  "offline-legacy-transfer=1",        # CPU copy of each accepted surface into the framebuffer
+  "offline-legacy-cpu-present=1",     # retire each swap after its copy
+  "offline-legacy-unit-scale=2","fajita-display-logical=2048x2732","fajita-fb-wc=1","fajita-fb-src-cached=1","sheng-fb-diff=1",      # /chosen/display-scale 1: 1080x2340 points, wider than any iPad portrait layout (sheng: 2)
+  "sheng-vsync=60",                   # software vsync for the render server; the s6e3fc2x01 runs at 60 Hz (sheng: 144)
+  "sheng-banner=0",                   # no diagnostic painting over the system frames
+  "offline-hid-input=1",              # load IOHIDFamily and IOHIDEventDriver
+  "offline-hid-home=1",               # publish NativeHidInput (keyboard/Home collection; no touch until a fajita touch driver)
+  "offline-key-events=1",             # the owned AppleKeyStore (NativeKeyStoreEvents): no SEP on this board
+  "sheng-aks=1",                      # it answers the keybag state queries: no passcode, unlocked
+  "sheng-gpu-addon=1",                # mount the PNG wallpaper of the payload's addon (scripts/make-fajita-wallpaper-addon.py), if any
+]
+
+# Fixups of signed text, applied by the kernel after signature validation (patches/xnu/native-text-fixup.patch); they reach it as
+# /chosen/text-fixups, not on the command line. Each is <file name>,<file offset>,<original>,<replacement>, in hex.
+text_fixups = [
+  # +[AWAttentionAwarenessConfiguration initialize] (21H461) only forces +[AWClientPreferences initialize] and deadlocks
+  # SpringBoard startup against it (ABBA between the main thread and Siri's SASMyriadController); it returns at once instead.
+  "dyld_shared_cache_arm64.15,421e8bc,28ad1bb0008544f9,c0035fd6008544f9",
+  # PosterBoardServices: PRSPosterPathURLResourceValues and PRSPosterPathFileAttributes require NSFileProtectionNone, which a Data
+  # volume without data protection never reports, so PosterBoard's data store is never viable ("Failed to migrate to Version 61
+  # from 59") and no poster, hence no wallpaper, is ever made. Both dictionaries keep only their first entry (readable / POSIX mode).
+  "dyld_shared_cache_arm64.13,1b05bec,44008052,24008052",
+  "dyld_shared_cache_arm64.13,1b05b08,44008052,24008052",
+  # BTAudioHALPlugin's factory returns NULL, so audiomxd skips it: with bluetoothd disabled (sheng-lite) the plugin reconnects to the
+  # missing com.apple.BTAudioHALPlugin.xpc in a tight loop (about 2700 times a second, millions of log lines, one core busy).
+  "BTAudioHALPlugin,38bec,ffc300d1f44f01a9,000080d2c0035fd6",
+]
+
+[payload.adt]
+tool = "scripts/make-fajita-adt.py"
+root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"   # the 21H461 OS volume, read from the image
+owned_memory_size = "0x130000000"   # 4.75 GiB, as sheng: 3 GiB ran out of memory 2 minutes into userland (2026-10-22)
+# The Data seed (data-seed.json, built by the Data seed workflow) arrives packed (DBRDISK1); NativeRamBlock serves it.
+packed_data_ramdisk = true
+# sheng-data-persist=2: Data writes go through to a store window at the end of userdata (NativeUfs), not to RAM.
+persistent_data = true
+# The iPad identity (model iPad7,1, target-type J120): libMobileGestalt prefix-matches hw.product against iPhone/iPod/iPad.
+ipad_identity = true
+# chip_id and the platform seed (/chosen/unique-chip-id) seed IOPlatformUUID; the seed is per device and kept out of Git
+# (UNIXNU_UNIQUE_CHIP_ID, .cache/platform-seed).
+chip_id = "207"
+unique_chip_id = "required"
+cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x600,0x700"
+psci_method = "smc"
+
+# The header of the stock boot image of OxygenOS 11.1.2.2 (scripts/fetch-fajita-boot.py --info), as version 0, the
+# version postmarketOS ships for fajita. Version 1 images were refused while version 0 ones loaded.
+# The ABL also refuses fastboot boot ("Load Error") once the active slot is unbootable: every reset spends one retry
+# of that slot, so run "fastboot set_active b" (or a) before "fastboot boot" during bring-up.
+[bootimg.image]
+header_version = 0
+pagesize = 4096
+base = 0x0
+kernel_offset = 0x8000
+ramdisk_offset = 0x1000000
+tags_offset = 0x100
+
+# The continuous splash framebuffer the stock ABL leaves running, which SimpleFbDxe draws into, is already reserved
+# in Resources/DTBs/fajita.dts as /reserved-memory/cont_splash_region@9d400000, so no [[bootimg.dtb_node]] is added.
