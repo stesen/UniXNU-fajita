@@ -100,6 +100,19 @@ jobs:
           echo "UNIXNU_UEFI=$GITHUB_WORKSPACE/uefi" >> "$GITHUB_ENV"
           find uefi -name 'Font.h' | head -3
 
+      - name: Stage boot-progress stub
+        run: |
+          cd unixnu
+          ./unixnu tree
+          mkdir -p out/fajita/tree/build/boot-progress-stub
+          cat > out/fajita/tree/build/boot-progress-stub/stub.c <<'EOF'
+          void boot_progress_cpu_tail(void) {}
+          void boot_progress_cpu_head(void) {}
+          EOF
+          xcrun -sdk iphoneos clang -arch arm64 -c out/fajita/tree/build/boot-progress-stub/stub.c             -o out/fajita/tree/build/boot-progress-stub/stub.o
+          xcrun ar rcs out/fajita/tree/build/boot-progress-stub/libBootProgressStub.a             out/fajita/tree/build/boot-progress-stub/stub.o
+          ls -l out/fajita/tree/build/boot-progress-stub
+
       - name: Build XNU pipeline
         run: |
           set -x
