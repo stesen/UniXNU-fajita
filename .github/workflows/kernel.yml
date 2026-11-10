@@ -49,6 +49,7 @@ jobs:
           cd unixnu
           # drivers/AppleKeyStoreState pins a commit the upstream repository no longer serves
           git config -f .gitmodules --remove-section submodule.drivers/AppleKeyStoreState || true
+          git rm --cached -q drivers/AppleKeyStoreState || true
           git submodule update --init --depth 1 --recursive || true
           for m in kits/XnuPrelink drivers/ArmCpu drivers/ArmDTPlatform drivers/DarwinBoot kits/VerifiedRoot; do
             test -e "$m/." || { echo "missing submodule $m"; exit 1; }
