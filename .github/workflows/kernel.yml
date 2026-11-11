@@ -136,34 +136,57 @@ jobs:
           xcrun ar rcs out/fajita/tree/build/boot-progress-stub/libBootProgressStub.a             out/fajita/tree/build/boot-progress-stub/stub.o
           ls -l out/fajita/tree/build/boot-progress-stub
 
-      - name: Build console kernel (candidate for the storage audit)
+      - name: Stage 1 - console kernel as the candidate
         run: |
           set -x
-          cd unixnu
+          cd "$GITHUB_WORKSPACE/device"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("board.toml")
+          s = p.read_text().replace('  "build-native-legacy-display.py",\n', '')
+          p.write_text(s)
+          PY
+          cd "$GITHUB_WORKSPACE/unixnu"
+          ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device"
           ./unixnu build kernel || true
           mkdir -p /tmp/cand
           cp out/fajita/kernel/kernel.macho /tmp/cand/kernel.macho
           cp out/fajita/kernel/kernel.json /tmp/cand/kernel.json 2>/dev/null || true
           ls -l /tmp/cand
 
-      - name: Build full kernel with the candidate
+      - name: Stage 2 - kernel with the legacy display kext
         run: |
           set -e
           set -x
           cd "$GITHUB_WORKSPACE/device"
-          cp board-full.toml board.toml
-          cp configs/fajita_full_defconfig configs/fajita_defconfig
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("board.toml")
+          s = p.read_text()
+          if "build-native-legacy-display.py" not in s:
+              s = s.replace('  "build-fajita-dwc3.py",',
+                            '  "build-fajita-dwc3.py",\n  "build-native-legacy-display.py",', 1)
+              p.write_text(s)
+          d = Path("configs/fajita_defconfig")
+          d.write_text(d.read_text().replace("CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n", "CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y"))
+          PY
           cd "$GITHUB_WORKSPACE/unixnu"
           ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device"
           ls -l /tmp/cand
-          FAJITA_STORAGE_CANDIDATE=/tmp/cand/kernel.macho ./unixnu build kernel
+          FAJITA_DISPLAY_CANDIDATE=/tmp/cand/kernel.macho \
+          FAJITA_STORAGE_CANDIDATE=/tmp/cand/kernel.macho \
+            ./unixnu build kernel
           ls -l out/fajita/kernel/
 
-      - name: Build payload (full argument set)
+      - name: Stage 3 - payload with the display arguments
         run: |
           set -x
-          cd unixnu
-          ./unixnu build payload -D "$GITHUB_WORKSPACE/device" --unique-chip-id 0badc0de
+          cp -r "$GITHUB_WORKSPACE/device" "$GITHUB_WORKSPACE/device-console"
+          python3 "$GITHUB_WORKSPACE/device-console/scripts/trim-payload-args.py" \
+            "$GITHUB_WORKSPACE/device-console/board.toml"
+          cd "$GITHUB_WORKSPACE/unixnu"
+          ./unixnu defconfig fajita_defconfig -D "$GITHUB_WORKSPACE/device-console"
+          ./unixnu build payload -D "$GITHUB_WORKSPACE/device-console" --unique-chip-id 0badc0de
           ls -l out/fajita/payload/
 
       - name: Collect artifacts
